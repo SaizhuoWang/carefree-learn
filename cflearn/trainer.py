@@ -784,7 +784,8 @@ class Trainer:
                 with torch.profiler.profile(
                         schedule=torch.profiler.schedule(wait=10, warmup=100, active=1, repeat=5),
                         on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                            f'./log/job_{os.environ.get("SLURM_JOBID", "anonymous_job")}'),
+                            f'{os.environ.get("PROFILER_LOG_ROOT", "~/profiler/log")}/'
+                            f'job_{os.environ.get("SLURM_JOBID", "anonymous_job")}'),
                         record_shapes=True,
                         profile_memory=True,
                         with_stack=True
