@@ -1,58 +1,56 @@
-import os
-import re
 import json
 import math
-import torch
-
-import torch.distributed as dist
-
+import os
+import re
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
-from typing import Type
-from typing import Tuple
-from typing import Union
-from typing import Callable
-from typing import Optional
 from typing import NamedTuple
-from tqdm.autonotebook import tqdm
-from torch.optim import Optimizer
-from cftool.misc import update_dict
-from cftool.misc import shallow_copy_dict
-from torch.optim.lr_scheduler import _LRScheduler
-from torch.nn.parallel import DistributedDataParallel as DDP
+from typing import Optional
+from typing import Tuple
+from typing import Type
+from typing import Union
 
-from .types import tensor_dict_type
-from .protocol import StepOutputs
-from .protocol import LossProtocol
-from .protocol import TrainerState
-from .protocol import ModelProtocol
-from .protocol import MetricsOutputs
-from .protocol import MonitorResults
-from .protocol import TrainerMonitor
-from .protocol import MetricProtocol
-from .protocol import InferenceProtocol
-from .protocol import DataLoaderProtocol
-from .protocol import ModelWithCustomSteps
+import torch
+import torch.distributed as dist
+from cftool.misc import shallow_copy_dict
+from cftool.misc import update_dict
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
+from tqdm.autonotebook import tqdm
+
+from .constants import CHECKPOINTS_FOLDER
+from .constants import ERROR_PREFIX
+from .constants import INFO_PREFIX
 from .constants import LOSS_KEY
 from .constants import PT_PREFIX
-from .constants import INFO_PREFIX
 from .constants import SCORES_FILE
-from .constants import ERROR_PREFIX
 from .constants import WARNING_PREFIX
-from .constants import CHECKPOINTS_FOLDER
+from .misc.internal_ import ConservativeMonitor
+from .misc.internal_ import MultipleMetrics
+from .misc.toolkit import WithRegister
+from .misc.toolkit import eval_context
+from .misc.toolkit import scheduler_requires_metric
+from .misc.toolkit import sort_dict_by_value
 from .misc.toolkit import summary
 from .misc.toolkit import to_device
-from .misc.toolkit import sort_dict_by_value
-from .misc.toolkit import scheduler_requires_metric
-from .misc.toolkit import eval_context
-from .misc.toolkit import WithRegister
-from .misc.internal_ import MultipleMetrics
-from .misc.internal_ import ConservativeMonitor
 from .modules.optimizers import optimizer_dict
-from .modules.schedulers import scheduler_dict
 from .modules.schedulers import WarmupScheduler
-
+from .modules.schedulers import scheduler_dict
+from .protocol import DataLoaderProtocol
+from .protocol import InferenceProtocol
+from .protocol import LossProtocol
+from .protocol import MetricProtocol
+from .protocol import MetricsOutputs
+from .protocol import ModelProtocol
+from .protocol import ModelWithCustomSteps
+from .protocol import MonitorResults
+from .protocol import StepOutputs
+from .protocol import TrainerMonitor
+from .protocol import TrainerState
+from .types import tensor_dict_type
 
 callback_dict: Dict[str, Type["TrainerCallback"]] = {}
 
@@ -139,16 +137,16 @@ class TrainerCallback(WithRegister):
         pass
 
     def mutate_train_forward_kwargs(
-        self,
-        kwargs: Dict[str, Any],
-        trainer: "Trainer",
+            self,
+            kwargs: Dict[str, Any],
+            trainer: "Trainer",
     ) -> None:
         pass
 
     def mutate_train_loss_kwargs(
-        self,
-        kwargs: Dict[str, Any],
-        trainer: "Trainer",
+            self,
+            kwargs: Dict[str, Any],
+            trainer: "Trainer",
     ) -> None:
         pass
 
@@ -159,10 +157,10 @@ class TrainerCallback(WithRegister):
         pass
 
     def log_metrics_msg(
-        self,
-        metric_outputs: MetricsOutputs,
-        metrics_log_path: str,
-        state: TrainerState,
+            self,
+            metric_outputs: MetricsOutputs,
+            metrics_log_path: str,
+            state: TrainerState,
     ) -> None:
         pass
 
@@ -173,9 +171,9 @@ class TrainerCallback(WithRegister):
         pass
 
     def after_monitor(
-        self,
-        monitor_results: MonitorResults,
-        state: TrainerState,
+            self,
+            monitor_results: MonitorResults,
+            state: TrainerState,
     ) -> None:
         pass
 
@@ -204,11 +202,11 @@ def get_sorted_checkpoints(checkpoint_folder: str) -> List[str]:
 
 
 def _setup_ddp(
-    rank: int,
-    world_size: int,
-    *,
-    backend: str = "gloo",
-    port: str = "12355",
+        rank: int,
+        world_size: int,
+        *,
+        backend: str = "gloo",
+        port: str = "12355",
 ) -> None:
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = port
@@ -229,30 +227,30 @@ class Trainer:
     inference: InferenceProtocol
 
     def __init__(
-        self,
-        state_config: Optional[Dict[str, Any]] = None,
-        *,
-        workplace: str,
-        num_epoch: int = 40,
-        max_epoch: int = 1000,
-        fixed_steps: Optional[int] = None,
-        valid_portion: float = 1.0,
-        amp: bool = False,
-        clip_norm: float = 0.0,
-        metrics: Optional[MetricProtocol] = None,
-        loss_metrics_weights: Optional[Dict[str, float]] = None,
-        monitors: Optional[Union[TrainerMonitor, List[TrainerMonitor]]] = None,
-        callbacks: Optional[Union[TrainerCallback, List[TrainerCallback]]] = None,
-        lr: Optional[float] = None,
-        optimizer_name: Optional[str] = None,
-        scheduler_name: Optional[str] = None,
-        optimizer_config: Optional[Dict[str, Any]] = None,
-        scheduler_config: Optional[Dict[str, Any]] = None,
-        optimizer_packs: Optional[Union[OptimizerPack, List[OptimizerPack]]] = None,
-        metrics_log_file: str = "metrics.txt",
-        ddp_config: Optional[Dict[str, Any]] = None,
-        finetune_config: Optional[Dict[str, Any]] = None,
-        tqdm_settings: Optional[TqdmSettings] = None,
+            self,
+            state_config: Optional[Dict[str, Any]] = None,
+            *,
+            workplace: str,
+            num_epoch: int = 40,
+            max_epoch: int = 1000,
+            fixed_steps: Optional[int] = None,
+            valid_portion: float = 1.0,
+            amp: bool = False,
+            clip_norm: float = 0.0,
+            metrics: Optional[MetricProtocol] = None,
+            loss_metrics_weights: Optional[Dict[str, float]] = None,
+            monitors: Optional[Union[TrainerMonitor, List[TrainerMonitor]]] = None,
+            callbacks: Optional[Union[TrainerCallback, List[TrainerCallback]]] = None,
+            lr: Optional[float] = None,
+            optimizer_name: Optional[str] = None,
+            scheduler_name: Optional[str] = None,
+            optimizer_config: Optional[Dict[str, Any]] = None,
+            scheduler_config: Optional[Dict[str, Any]] = None,
+            optimizer_packs: Optional[Union[OptimizerPack, List[OptimizerPack]]] = None,
+            metrics_log_file: str = "metrics.txt",
+            ddp_config: Optional[Dict[str, Any]] = None,
+            finetune_config: Optional[Dict[str, Any]] = None,
+            tqdm_settings: Optional[TqdmSettings] = None,
     ):
         self.tqdm_settings = tqdm_settings or TqdmSettings()
         self.state_config = state_config or {}
@@ -435,9 +433,9 @@ class Trainer:
         print("\n".join(["=" * 100, msg, "-" * 100] + param_names + ["-" * 100]))
 
     def default_lr_configs(
-        self,
-        optimizer: Optimizer,
-        optimizer_config: Dict[str, Any],
+            self,
+            optimizer: Optimizer,
+            optimizer_config: Dict[str, Any],
     ) -> Dict[str, Dict[str, Any]]:
         opt_lr = optimizer_config["lr"]
         # step
@@ -559,9 +557,9 @@ class Trainer:
             param.grad = None
 
     def _get_scheduler_settings(
-        self,
-        key: str,
-        scheduler: Any,
+            self,
+            key: str,
+            scheduler: Any,
     ) -> Tuple[bool, Dict[str, Any]]:
         kwargs = {}
         should_log_lr = self.state.should_log_lr
@@ -633,6 +631,7 @@ class Trainer:
         return MonitorResults(terminate, save_checkpoint, self.intermediate)
 
     def _step(self, batch_idx: int, batch: tensor_dict_type) -> StepOutputs:
+
         batch = to_device(batch, self.device)
         # kwargs
         forward_kwargs: Dict[str, Any] = {}
@@ -663,6 +662,7 @@ class Trainer:
         # optimize
         self._optimizer_step()
         self._scheduler_step()
+
         return StepOutputs(forward_results, loss_dict)
 
     def _weighted_loss_score(self, loss_items: Dict[str, float]) -> float:
@@ -704,16 +704,16 @@ class Trainer:
         }
 
     def fit(
-        self,
-        loss: LossProtocol,
-        model: ModelProtocol,
-        inference: InferenceProtocol,
-        train_loader: DataLoaderProtocol,
-        valid_loader: Optional[DataLoaderProtocol] = None,
-        *,
-        configs_export_file: Optional[str] = None,
-        show_summary: Optional[bool] = None,
-        cuda: Optional[str] = None,
+            self,
+            loss: LossProtocol,
+            model: ModelProtocol,
+            inference: InferenceProtocol,
+            train_loader: DataLoaderProtocol,
+            valid_loader: Optional[DataLoaderProtocol] = None,
+            *,
+            configs_export_file: Optional[str] = None,
+            show_summary: Optional[bool] = None,
+            cuda: Optional[str] = None,
     ) -> "Trainer":
         self.device_info = DeviceInfo(cuda, self.rank)
         if self.is_rank_0:
@@ -781,21 +781,30 @@ class Trainer:
                         position=self.tqdm_settings.position + 1,
                         leave=False,
                     )
-                for i, batch in enumerate(step_iterator):
-                    self.state.step += 1
-                    step_outputs = self._step(i, batch)
-                    for callback in self.callbacks:
-                        callback.after_step(step_outputs, self.state)
-                    monitor_results = self._monitor_step()
-                    for callback in self.callbacks:
-                        callback.after_monitor(monitor_results, self.state)
-                    if self.is_rank_0 and monitor_results.save_checkpoint:
-                        metric_outputs = monitor_results.metric_outputs
-                        assert metric_outputs is not None
-                        self.save_checkpoint(metric_outputs.final_score)
-                    terminate = monitor_results.terminate or self.state.should_terminate
-                    if terminate:
-                        break
+                with torch.profiler.profile(
+                        schedule=torch.profiler.schedule(wait=10, warmup=100, active=1, repeat=5),
+                        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                            f'./log/job_{os.environ.get("SLURM_JOBID", "anonymous_job")}'),
+                        record_shapes=True,
+                        profile_memory=True,
+                        with_stack=True
+                ) as prof:
+                    for i, batch in enumerate(step_iterator):
+                        self.state.step += 1
+                        step_outputs = self._step(i, batch)
+                        prof.step()
+                        for callback in self.callbacks:
+                            callback.after_step(step_outputs, self.state)
+                        monitor_results = self._monitor_step()
+                        for callback in self.callbacks:
+                            callback.after_monitor(monitor_results, self.state)
+                        if self.is_rank_0 and monitor_results.save_checkpoint:
+                            metric_outputs = monitor_results.metric_outputs
+                            assert metric_outputs is not None
+                            self.save_checkpoint(metric_outputs.final_score)
+                        terminate = monitor_results.terminate or self.state.should_terminate
+                        if terminate:
+                            break
             except KeyboardInterrupt:
                 print(f"{ERROR_PREFIX}keyboard interrupted")
                 terminate = True
@@ -825,10 +834,10 @@ class Trainer:
         return self
 
     def get_metrics(
-        self,
-        *,
-        portion: float = 1.0,
-        loader: Optional[DataLoaderProtocol] = None,
+            self,
+            *,
+            portion: float = 1.0,
+            loader: Optional[DataLoaderProtocol] = None,
     ) -> MetricsOutputs:
         if loader is None:
             loader = self.validation_loader
@@ -861,11 +870,11 @@ class Trainer:
     # checkpointing
 
     def save_checkpoint(
-        self,
-        score: float,
-        folder: Optional[str] = None,
-        *,
-        no_history: bool = False,
+            self,
+            score: float,
+            folder: Optional[str] = None,
+            *,
+            no_history: bool = False,
     ) -> None:
         if folder is None:
             if self.checkpoint_folder is None:
@@ -877,7 +886,7 @@ class Trainer:
         if self.state.max_snapshot_file > 0:
             checkpoints = get_sorted_checkpoints(folder)
             if len(checkpoints) >= self.state.max_snapshot_file:
-                for file in checkpoints[self.state.max_snapshot_file - 1 :]:
+                for file in checkpoints[self.state.max_snapshot_file - 1:]:
                     self.checkpoint_scores.pop(file)
                     os.remove(os.path.join(folder, file))
         # pt
@@ -890,10 +899,10 @@ class Trainer:
             json.dump(sort_dict_by_value(scores, reverse=True), f)
 
     def restore_checkpoint(
-        self,
-        folder: str = None,
-        strict: bool = True,
-        state_dict_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+            self,
+            folder: str = None,
+            strict: bool = True,
+            state_dict_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> bool:
         if folder is None:
             if self.checkpoint_folder is None:
