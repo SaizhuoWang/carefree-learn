@@ -369,6 +369,7 @@ class DLPipeline(PipelineProtocol, metaclass=ABCMeta):
         cuda: Optional[str] = None,
     ) -> "PipelineProtocol":
         self._before_loop(x, *args, sample_weights=sample_weights, cuda=cuda)
+        self.log_msg('Making trainer ...')
         self.trainer = make_trainer(**shallow_copy_dict(self.trainer_config))
         self.trainer.fit(
             self.loss,

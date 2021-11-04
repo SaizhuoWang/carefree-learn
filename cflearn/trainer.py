@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import math
 import os
 import re
@@ -18,10 +19,12 @@ import torch
 import torch.distributed as dist
 from cftool.misc import shallow_copy_dict
 from cftool.misc import update_dict
+from cftool.misc import LoggingMixin
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from tqdm.autonotebook import tqdm
+from torch.profiler import record_function
 
 from .constants import CHECKPOINTS_FOLDER
 from .constants import ERROR_PREFIX
@@ -215,7 +218,7 @@ def _setup_ddp(
     dist.init_process_group(backend, rank=rank, world_size=world_size)
 
 
-class Trainer:
+class Trainer(LoggingMixin):
     loss: LossProtocol
     model: ModelProtocol
     metrics: Optional[MetricProtocol]
@@ -253,7 +256,10 @@ class Trainer:
             ddp_config: Optional[Dict[str, Any]] = None,
             finetune_config: Optional[Dict[str, Any]] = None,
             tqdm_settings: Optional[TqdmSettings] = None,
+            log_root: str = None,
+            log_level: int = logging.INFO
     ):
+        self.init_logging(logging_root=log_root, log_level=log_level)
         self.tqdm_settings = tqdm_settings or TqdmSettings()
         self.state_config = state_config or {}
         self.max_epoch = max_epoch
@@ -633,15 +639,15 @@ class Trainer:
         return MonitorResults(terminate, save_checkpoint, self.intermediate)
 
     def _step(self, batch_idx: int, batch: tensor_dict_type) -> StepOutputs:
-
-        batch = to_device(batch, self.device)
-        # kwargs
-        forward_kwargs: Dict[str, Any] = {}
-        for callback in self.callbacks:
-            callback.mutate_train_forward_kwargs(forward_kwargs, self)
-        loss_kwargs: Dict[str, Any] = {}
-        for callback in self.callbacks:
-            callback.mutate_train_loss_kwargs(loss_kwargs, self)
+        with record_function('To device and callback'):
+            batch = to_device(batch, self.device)
+            # kwargs
+            forward_kwargs: Dict[str, Any] = {}
+            for callback in self.callbacks:
+                callback.mutate_train_forward_kwargs(forward_kwargs, self)
+            loss_kwargs: Dict[str, Any] = {}
+            for callback in self.callbacks:
+                callback.mutate_train_loss_kwargs(loss_kwargs, self)
         # allow model defines its own training step
         if self.model_has_custom_steps and self.model.custom_train_step:
             return self.model.train_step(  # type: ignore
@@ -653,17 +659,19 @@ class Trainer:
             )
         # forward & loss
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            forward_results = self.model(batch_idx, batch, self.state, **forward_kwargs)
-            loss_dict = self.loss(forward_results, batch, self.state, **loss_kwargs)
+            with record_function('Model forward'):
+                forward_results = self.model(batch_idx, batch, self.state, **forward_kwargs)
+                loss_dict = self.loss(forward_results, batch, self.state, **loss_kwargs)
         # backward
-        loss = loss_dict[LOSS_KEY]
-        self.grad_scaler.scale(loss).backward()
-        # clip norm
-        if self.clip_norm > 0.0:
-            self._clip_norm_step()
-        # optimize
-        self._optimizer_step()
-        self._scheduler_step()
+        with record_function('Loss backward and optimizer step'):
+            loss = loss_dict[LOSS_KEY]
+            self.grad_scaler.scale(loss).backward()
+            # clip norm
+            if self.clip_norm > 0.0:
+                self._clip_norm_step()
+            # optimize
+            self._optimizer_step()
+            self._scheduler_step()
 
         return StepOutputs(forward_results, loss_dict)
 
@@ -717,6 +725,7 @@ class Trainer:
             show_summary: Optional[bool] = None,
             cuda: Optional[str] = None,
     ) -> "Trainer":
+        self.log_msg('Model fitting starts √')
         self.device_info = DeviceInfo(cuda, self.rank)
         if self.is_rank_0:
             with open(os.path.join(self.workplace, "model.txt"), "w") as f:
@@ -744,6 +753,7 @@ class Trainer:
         # finetune
         self._init_finetune()
         # verbose
+        self.log_msg('Generating summary')
         if show_summary is None:
             show_summary = not self.tqdm_settings.in_distributed
         if self.is_rank_0:

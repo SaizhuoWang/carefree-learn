@@ -1,3 +1,5 @@
+import logging
+import os.path
 from typing import Any
 from typing import Dict
 from typing import List
@@ -45,6 +47,8 @@ def make_trainer(
     ddp_config: Optional[Dict[str, Any]] = None,
     finetune_config: Optional[Dict[str, Any]] = None,
     tqdm_settings: Optional[Dict[str, Any]] = None,
+    log_dir: str = os.path.join(os.getcwd(), 'log'),
+    log_level: int = logging.INFO
 ) -> Trainer:
     if state_config is None:
         state_config = {}
@@ -136,4 +140,6 @@ def make_trainer(
             tqdm_settings.setdefault("tqdm_position", 0),
             tqdm_settings.setdefault("tqdm_desc", "epoch"),
         ),
+        log_root=log_dir,
+        log_level=log_level
     )
