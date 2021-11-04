@@ -1,3 +1,4 @@
+import datetime
 import json
 import math
 import os
@@ -782,10 +783,10 @@ class Trainer:
                         leave=False,
                     )
                 with torch.profiler.profile(
-                        schedule=torch.profiler.schedule(wait=10, warmup=20, active=3, repeat=5),
+                        schedule=torch.profiler.schedule(wait=30, warmup=50, active=1, repeat=3),
                         on_trace_ready=torch.profiler.tensorboard_trace_handler(
                             f'{os.environ.get("PROFILER_LOG_ROOT", "~/profiler/log")}/'
-                            f'job_{os.environ.get("SLURM_JOBID", "anonymous_job")}'),
+                            f'job_{os.environ.get("SLURM_JOBID", f"anonymous_job_{datetime.datetime.now()}")}'),
                         record_shapes=True,
                         profile_memory=True,
                         with_stack=True
