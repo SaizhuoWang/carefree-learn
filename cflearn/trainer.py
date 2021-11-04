@@ -13,6 +13,7 @@ from typing import Tuple
 from typing import Type
 from typing import Union
 
+import psutil
 import torch
 import torch.distributed as dist
 from cftool.misc import shallow_copy_dict
@@ -782,11 +783,14 @@ class Trainer:
                         position=self.tqdm_settings.position + 1,
                         leave=False,
                     )
+
+                parent_pid = os.getppid()
+                parent_process_cmdline = '+'.join(psutil.Process(parent_pid).cmdline())
                 with torch.profiler.profile(
-                        schedule=torch.profiler.schedule(wait=30, warmup=50, active=1, repeat=3),
+                        schedule=torch.profiler.schedule(wait=150, warmup=50, active=3, repeat=5),
                         on_trace_ready=torch.profiler.tensorboard_trace_handler(
                             f'{os.environ.get("PROFILER_LOG_ROOT", "~/profiler/log")}/'
-                            f'job_{os.environ.get("SLURM_JOBID", f"anonymous_job_{datetime.datetime.now()}")}'),
+                            f'{parent_process_cmdline}_{datetime.datetime.now()}'),
                         record_shapes=True,
                         profile_memory=True,
                         with_stack=True
