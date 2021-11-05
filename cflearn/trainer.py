@@ -807,18 +807,22 @@ class Trainer(LoggingMixin):
                 ) as prof:
                     for i, batch in enumerate(step_iterator):
                         self.state.step += 1
-                        step_outputs = self._step(i, batch)
+                        with record_function('Step function'):
+                            step_outputs = self._step(i, batch)
+                        with record_function('Callbacks'):
+                            for callback in self.callbacks:
+                                callback.after_step(step_outputs, self.state)
+                        with record_function('Monitor step'):
+                            monitor_results = self._monitor_step()
+                            for callback in self.callbacks:
+                                callback.after_monitor(monitor_results, self.state)
+                        with record_function('Save checkpoint'):
+                            if self.is_rank_0 and monitor_results.save_checkpoint:
+                                metric_outputs = monitor_results.metric_outputs
+                                assert metric_outputs is not None
+                                self.save_checkpoint(metric_outputs.final_score)
+                            terminate = monitor_results.terminate or self.state.should_terminate
                         prof.step()
-                        for callback in self.callbacks:
-                            callback.after_step(step_outputs, self.state)
-                        monitor_results = self._monitor_step()
-                        for callback in self.callbacks:
-                            callback.after_monitor(monitor_results, self.state)
-                        if self.is_rank_0 and monitor_results.save_checkpoint:
-                            metric_outputs = monitor_results.metric_outputs
-                            assert metric_outputs is not None
-                            self.save_checkpoint(metric_outputs.final_score)
-                        terminate = monitor_results.terminate or self.state.should_terminate
                         if terminate:
                             break
             except KeyboardInterrupt:
