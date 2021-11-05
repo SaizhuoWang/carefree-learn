@@ -4,6 +4,7 @@ import sys
 from typing import Any
 from typing import Union
 from typing import Optional
+from typing import Dict
 from cftool.misc import Saving, shallow_copy_dict
 
 from cflearn.constants import META_CONFIG_NAME
@@ -20,15 +21,26 @@ class Task:
         config_folder: str,
         cuda: Optional[Union[int, str]],
     ) -> "Task":
+        # Make command
         if self.run_command is not None:
             command = self.run_command
         else:
             command = f"{sys.executable} -m cflearn.dist.ml.runs.{execute}"
+
+        # Make environment variables to export
+        export = self.meta_kwargs.get('export', None)
+        if export is not None:
+            environ_list = [f'{k}={v}' for k, v in export.items()]
+            env = ' '.join(environ_list)
+        else:
+            env = ''
+        self.meta_kwargs.pop('export')
+
         meta_config = shallow_copy_dict(self.meta_kwargs)
         meta_config["cuda"] = cuda
         os.makedirs(config_folder, exist_ok=True)
         Saving.save_dict(meta_config, META_CONFIG_NAME, config_folder)
-        os.system(f"{command} --config_folder {config_folder}")
+        os.system(f"{env} {command} --config_folder {config_folder}")
         return self
 
     def save(self, saving_folder: str) -> "Task":
