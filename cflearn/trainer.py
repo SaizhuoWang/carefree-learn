@@ -639,15 +639,14 @@ class Trainer(LoggingMixin):
         return MonitorResults(terminate, save_checkpoint, self.intermediate)
 
     def _step(self, batch_idx: int, batch: tensor_dict_type) -> StepOutputs:
-        with record_function('To device and callback'):
-            batch = to_device(batch, self.device)
-            # kwargs
-            forward_kwargs: Dict[str, Any] = {}
-            for callback in self.callbacks:
-                callback.mutate_train_forward_kwargs(forward_kwargs, self)
-            loss_kwargs: Dict[str, Any] = {}
-            for callback in self.callbacks:
-                callback.mutate_train_loss_kwargs(loss_kwargs, self)
+        batch = to_device(batch, self.device)
+        # kwargs
+        forward_kwargs: Dict[str, Any] = {}
+        for callback in self.callbacks:
+            callback.mutate_train_forward_kwargs(forward_kwargs, self)
+        loss_kwargs: Dict[str, Any] = {}
+        for callback in self.callbacks:
+            callback.mutate_train_loss_kwargs(loss_kwargs, self)
         # allow model defines its own training step
         if self.model_has_custom_steps and self.model.custom_train_step:
             return self.model.train_step(  # type: ignore
@@ -663,15 +662,14 @@ class Trainer(LoggingMixin):
                 forward_results = self.model(batch_idx, batch, self.state, **forward_kwargs)
                 loss_dict = self.loss(forward_results, batch, self.state, **loss_kwargs)
         # backward
-        with record_function('Loss backward and optimizer step'):
-            loss = loss_dict[LOSS_KEY]
-            self.grad_scaler.scale(loss).backward()
-            # clip norm
-            if self.clip_norm > 0.0:
-                self._clip_norm_step()
-            # optimize
-            self._optimizer_step()
-            self._scheduler_step()
+        loss = loss_dict[LOSS_KEY]
+        self.grad_scaler.scale(loss).backward()
+        # clip norm
+        if self.clip_norm > 0.0:
+            self._clip_norm_step()
+        # optimize
+        self._optimizer_step()
+        self._scheduler_step()
 
         return StepOutputs(forward_results, loss_dict)
 
@@ -796,35 +794,25 @@ class Trainer(LoggingMixin):
 
                 parent_pid = os.getppid()
                 parent_process_cmdline = '+'.join(psutil.Process(parent_pid).cmdline())
-                with torch.profiler.profile(
-                        schedule=torch.profiler.schedule(wait=150, warmup=50, active=3, repeat=5),
-                        on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                            f'{os.environ.get("PROFILER_LOG_ROOT", "~/profiler/log")}/'
-                            f'{parent_process_cmdline}_{datetime.datetime.now()}'),
-                        record_shapes=True,
-                        profile_memory=True,
-                        with_stack=True
-                ) as prof:
-                    for i, batch in enumerate(step_iterator):
-                        self.state.step += 1
-                        with record_function('Step function'):
-                            step_outputs = self._step(i, batch)
-                        with record_function('Callbacks'):
-                            for callback in self.callbacks:
-                                callback.after_step(step_outputs, self.state)
-                        with record_function('Monitor step'):
-                            monitor_results = self._monitor_step()
-                            for callback in self.callbacks:
-                                callback.after_monitor(monitor_results, self.state)
-                        with record_function('Save checkpoint'):
-                            if self.is_rank_0 and monitor_results.save_checkpoint:
-                                metric_outputs = monitor_results.metric_outputs
-                                assert metric_outputs is not None
-                                self.save_checkpoint(metric_outputs.final_score)
-                            terminate = monitor_results.terminate or self.state.should_terminate
-                        prof.step()
-                        if terminate:
-                            break
+                for i, batch in enumerate(step_iterator):
+                    self.state.step += 1
+
+                    step_outputs = self._step(i, batch)
+
+                    for callback in self.callbacks:
+                        callback.after_step(step_outputs, self.state)
+
+                    monitor_results = self._monitor_step()
+                    for callback in self.callbacks:
+                        callback.after_monitor(monitor_results, self.state)
+
+                    if self.is_rank_0 and monitor_results.save_checkpoint:
+                        metric_outputs = monitor_results.metric_outputs
+                        assert metric_outputs is not None
+                        self.save_checkpoint(metric_outputs.final_score)
+                    terminate = monitor_results.terminate or self.state.should_terminate
+                    if terminate:
+                        break
             except KeyboardInterrupt:
                 print(f"{ERROR_PREFIX}keyboard interrupted")
                 terminate = True
