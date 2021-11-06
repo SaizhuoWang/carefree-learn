@@ -723,7 +723,6 @@ class Trainer(LoggingMixin):
             show_summary: Optional[bool] = None,
             cuda: Optional[str] = None,
     ) -> "Trainer":
-        self.log_msg('Model fitting starts √')
         self.device_info = DeviceInfo(cuda, self.rank)
         if self.is_rank_0:
             with open(os.path.join(self.workplace, "model.txt"), "w") as f:
@@ -751,7 +750,6 @@ class Trainer(LoggingMixin):
         # finetune
         self._init_finetune()
         # verbose
-        self.log_msg('Generating summary')
         if show_summary is None:
             show_summary = not self.tqdm_settings.in_distributed
         if self.is_rank_0:
@@ -780,9 +778,11 @@ class Trainer(LoggingMixin):
             configs_export_path = os.path.join(self.workplace, configs_export_file)
             with open(configs_export_path, "w") as f:
                 json.dump(self.configs, f)
+        self.log_msg('Model fitting starts √')
         while self.state.should_train:
             try:
                 self.state.epoch += 1
+                self.log_msg(f'Training epoch {self.state.epoch}')
                 step_iterator = self.train_loader
                 if self.is_rank_0 and self.tqdm_settings.use_step_tqdm:
                     step_tqdm = step_iterator = tqdm(
@@ -792,8 +792,6 @@ class Trainer(LoggingMixin):
                         leave=False,
                     )
 
-                parent_pid = os.getppid()
-                parent_process_cmdline = '+'.join(psutil.Process(parent_pid).cmdline())
                 for i, batch in enumerate(step_iterator):
                     self.state.step += 1
 
