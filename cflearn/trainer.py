@@ -778,11 +778,11 @@ class Trainer(LoggingMixin):
             configs_export_path = os.path.join(self.workplace, configs_export_file)
             with open(configs_export_path, "w") as f:
                 json.dump(self.configs, f)
-        self.log_msg('Model fitting starts √')
+        self.log_msg('Model fitting starts √', level=logging.DEBUG)
         while self.state.should_train:
             try:
                 self.state.epoch += 1
-                self.log_msg(f'Training epoch {self.state.epoch}')
+                self.log_msg(f'Training epoch {self.state.epoch}', level=logging.DEBUG)
                 step_iterator = self.train_loader
                 if self.is_rank_0 and self.tqdm_settings.use_step_tqdm:
                     step_tqdm = step_iterator = tqdm(
