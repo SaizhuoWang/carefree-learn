@@ -1,57 +1,55 @@
-import os
 import json
-import onnx
-import torch
+import os
 import shutil
-
-import numpy as np
-import torch.distributed as dist
-import torch.multiprocessing as mp
-
-from abc import abstractmethod
 from abc import ABCMeta
+from abc import abstractmethod
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
-from typing import Type
-from typing import Tuple
-from typing import Union
-from typing import Callable
 from typing import Optional
-from onnxsim import simplify as onnx_simplify
-from cftool.misc import shallow_copy_dict
-from cftool.misc import lock_manager
+from typing import Tuple
+from typing import Type
+from typing import Union
+
+import numpy as np
+import onnx
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from cftool.misc import Saving
+from cftool.misc import lock_manager
+from cftool.misc import shallow_copy_dict
+from onnxsim import simplify as onnx_simplify
 from onnxsim.onnx_simplifier import get_input_names
 
 from .trainer import make_trainer
-from ...types import np_dict_type
-from ...types import tensor_dict_type
-from ...types import sample_weights_type
-from ...types import states_callback_type
-from ...trainer import get_sorted_checkpoints
-from ...trainer import Trainer
-from ...trainer import DeviceInfo
-from ...protocol import ONNX
-from ...protocol import LossProtocol
-from ...protocol import ModelProtocol
-from ...protocol import MetricsOutputs
-from ...protocol import InferenceProtocol
-from ...protocol import DataLoaderProtocol
-from ...constants import PT_PREFIX
-from ...constants import INFO_PREFIX
-from ...constants import SCORES_FILE
-from ...constants import DDP_MODEL_NAME
-from ...constants import WARNING_PREFIX
-from ...constants import CHECKPOINTS_FOLDER
 from ...constants import BATCH_INDICES_KEY
-from ...misc.toolkit import to_numpy
+from ...constants import CHECKPOINTS_FOLDER
+from ...constants import DDP_MODEL_NAME
+from ...constants import INFO_PREFIX
+from ...constants import PT_PREFIX
+from ...constants import SCORES_FILE
+from ...constants import WARNING_PREFIX
+from ...misc.internal_.losses import multi_prefix_mapping
+from ...misc.toolkit import WithRegister
+from ...misc.toolkit import eval_context
 from ...misc.toolkit import get_latest_workplace
 from ...misc.toolkit import prepare_workplace_from
-from ...misc.toolkit import eval_context
-from ...misc.toolkit import WithRegister
-from ...misc.internal_.losses import multi_prefix_mapping
-
+from ...misc.toolkit import to_numpy
+from ...protocol import DataLoaderProtocol
+from ...protocol import InferenceProtocol
+from ...protocol import LossProtocol
+from ...protocol import MetricsOutputs
+from ...protocol import ModelProtocol
+from ...protocol import ONNX
+from ...trainer import DeviceInfo
+from ...trainer import Trainer
+from ...trainer import get_sorted_checkpoints
+from ...types import np_dict_type
+from ...types import sample_weights_type
+from ...types import states_callback_type
+from ...types import tensor_dict_type
 
 pipeline_dict: Dict[str, Type["PipelineProtocol"]] = {}
 split_sw_type = Tuple[Optional[np.ndarray], Optional[np.ndarray]]
@@ -369,7 +367,6 @@ class DLPipeline(PipelineProtocol, metaclass=ABCMeta):
         cuda: Optional[str] = None,
     ) -> "PipelineProtocol":
         self._before_loop(x, *args, sample_weights=sample_weights, cuda=cuda)
-        self.log_msg('Making trainer ...')
         self.trainer = make_trainer(**shallow_copy_dict(self.trainer_config))
         self.trainer.fit(
             self.loss,
