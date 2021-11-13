@@ -560,11 +560,13 @@ class InferenceProtocol:
             )
 
         use_grad = kwargs.pop("use_grad", self.use_grad_in_predict)
+        print("use_grad = {}".format(use_grad))
         with loader.temporarily_disable_shuffle():
             try:
                 return _core()
             except:
                 use_grad = self.use_grad_in_predict = True
+                print("Exception happened. now using grad")
                 return _core()
 
 

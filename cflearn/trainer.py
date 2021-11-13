@@ -849,6 +849,7 @@ class Trainer(LoggingMixin):
             loader = self.validation_loader
         if self.model_has_custom_steps and self.model.custom_evaluate_step:
             use_grad = self.inference.use_grad_in_predict
+            print("Use_grad = {}".format(use_grad))
             try:
                 with eval_context(self.model, use_grad=use_grad):
                     rs = self.model.evaluate_step(loader, portion, self)  # type: ignore
