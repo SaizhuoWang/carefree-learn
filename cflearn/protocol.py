@@ -1,36 +1,35 @@
+import datetime
 import math
-import torch
-
-import numpy as np
-import torch.nn as nn
-
-from abc import abstractmethod
 from abc import ABC
 from abc import ABCMeta
+from abc import abstractmethod
 from copy import deepcopy
-from tqdm import tqdm
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import NamedTuple
+from typing import Optional
 from typing import Type
 from typing import Union
-from typing import Optional
-from typing import NamedTuple
-from onnxruntime import InferenceSession
-from cftool.misc import shallow_copy_dict
-from cftool.misc import context_error_handler
 
+import numpy as np
+import torch
+import torch.nn as nn
+from cftool.misc import context_error_handler
+from cftool.misc import shallow_copy_dict
+from onnxruntime import InferenceSession
+from tqdm import tqdm
+
+from .constants import LABEL_KEY
+from .constants import LOSS_KEY
+from .misc.toolkit import WithRegister
+from .misc.toolkit import eval_context
+from .misc.toolkit import to_device
+from .misc.toolkit import to_numpy
+from .misc.toolkit import to_standard
 from .types import losses_type
 from .types import np_dict_type
 from .types import tensor_dict_type
-from .constants import LOSS_KEY
-from .constants import LABEL_KEY
-from .misc.toolkit import to_numpy
-from .misc.toolkit import to_device
-from .misc.toolkit import to_standard
-from .misc.toolkit import eval_context
-from .misc.toolkit import WithRegister
-
 
 data_dict: Dict[str, Type["DataProtocol"]] = {}
 loader_dict: Dict[str, Type["DataLoaderProtocol"]] = {}
@@ -116,11 +115,11 @@ class ModelProtocol(nn.Module, WithRegister, metaclass=ABCMeta):
 
     @abstractmethod
     def forward(
-        self,
-        batch_idx: int,
-        batch: tensor_dict_type,
-        state: Optional["TrainerState"] = None,
-        **kwargs: Any,
+            self,
+            batch_idx: int,
+            batch: tensor_dict_type,
+            state: Optional["TrainerState"] = None,
+            **kwargs: Any,
     ) -> tensor_dict_type:
         pass
 
@@ -151,21 +150,21 @@ class ModelWithCustomSteps(ModelProtocol, metaclass=ABCMeta):
 
     @abstractmethod
     def train_step(
-        self,
-        batch_idx: int,
-        batch: tensor_dict_type,
-        trainer: Any,
-        forward_kwargs: Dict[str, Any],
-        loss_kwargs: Dict[str, Any],
+            self,
+            batch_idx: int,
+            batch: tensor_dict_type,
+            trainer: Any,
+            forward_kwargs: Dict[str, Any],
+            loss_kwargs: Dict[str, Any],
     ) -> StepOutputs:
         pass
 
     @abstractmethod
     def evaluate_step(
-        self,
-        loader: DataLoaderProtocol,
-        portion: float,
-        trainer: Any,
+            self,
+            loader: DataLoaderProtocol,
+            portion: float,
+            trainer: Any,
     ) -> MetricsOutputs:
         pass
 
@@ -175,21 +174,21 @@ class ModelWithCustomSteps(ModelProtocol, metaclass=ABCMeta):
 
 class TrainerState:
     def __init__(
-        self,
-        loader: DataLoaderProtocol,
-        *,
-        num_epoch: int,
-        max_epoch: int,
-        fixed_steps: Optional[int] = None,
-        extension: int = 5,
-        enable_logging: bool = True,
-        min_num_sample: int = 3000,
-        snapshot_start_step: Optional[int] = None,
-        max_snapshot_file: int = 5,
-        num_snapshot_per_epoch: int = 2,
-        num_step_per_log: int = 350,
-        num_step_per_snapshot: Optional[int] = None,
-        max_step_per_snapshot: int = 2000,
+            self,
+            loader: DataLoaderProtocol,
+            *,
+            num_epoch: int,
+            max_epoch: int,
+            fixed_steps: Optional[int] = None,
+            extension: int = 5,
+            enable_logging: bool = True,
+            min_num_sample: int = 3000,
+            snapshot_start_step: Optional[int] = None,
+            max_snapshot_file: int = 5,
+            num_snapshot_per_epoch: int = 2,
+            num_step_per_log: int = 350,
+            num_step_per_snapshot: Optional[int] = None,
+            max_step_per_snapshot: int = 2000,
     ):
         self.step = self.epoch = 0
         self.batch_size = loader.batch_size
@@ -347,9 +346,9 @@ class LossProtocol(nn.Module, WithRegister, metaclass=ABCMeta):
     d: Dict[str, Type["LossProtocol"]] = loss_dict
 
     def __init__(
-        self,
-        config: Optional[Dict[str, Any]] = None,
-        reduction: str = "mean",
+            self,
+            config: Optional[Dict[str, Any]] = None,
+            reduction: str = "mean",
     ):
         super().__init__()
         self.config = config or {}
@@ -370,20 +369,20 @@ class LossProtocol(nn.Module, WithRegister, metaclass=ABCMeta):
 
     @abstractmethod
     def _core(
-        self,
-        forward_results: tensor_dict_type,
-        batch: tensor_dict_type,
-        state: Optional[TrainerState] = None,
-        **kwargs: Any,
+            self,
+            forward_results: tensor_dict_type,
+            batch: tensor_dict_type,
+            state: Optional[TrainerState] = None,
+            **kwargs: Any,
     ) -> losses_type:
         # return losses without reduction
         pass
 
     def forward(
-        self,
-        forward_results: tensor_dict_type,
-        batch: tensor_dict_type,
-        state: Optional[TrainerState] = None,
+            self,
+            forward_results: tensor_dict_type,
+            batch: tensor_dict_type,
+            state: Optional[TrainerState] = None,
     ) -> tensor_dict_type:
         losses = self._core(forward_results, batch, state)
         if isinstance(losses, torch.Tensor):
@@ -397,10 +396,10 @@ class LossProtocol(nn.Module, WithRegister, metaclass=ABCMeta):
 
 class ONNX:
     def __init__(
-        self,
-        *,
-        onnx_path: str,
-        output_names: List[str],
+            self,
+            *,
+            onnx_path: str,
+            output_names: List[str],
     ):
         self.ort_session = InferenceSession(onnx_path)
         self.output_names = output_names
@@ -417,11 +416,11 @@ class ONNX:
 
 class InferenceProtocol:
     def __init__(
-        self,
-        *,
-        onnx: Optional[ONNX] = None,
-        model: Optional[ModelProtocol] = None,
-        use_grad_in_predict: bool = False,
+            self,
+            *,
+            onnx: Optional[ONNX] = None,
+            model: Optional[ModelProtocol] = None,
+            use_grad_in_predict: bool = False,
     ):
         self.onnx = onnx
         self.model = model
@@ -432,16 +431,16 @@ class InferenceProtocol:
         self.use_grad_in_predict = use_grad_in_predict
 
     def get_outputs(
-        self,
-        loader: DataLoaderProtocol,
-        *,
-        portion: float = 1.0,
-        state: Optional[TrainerState] = None,
-        metrics: Optional["MetricProtocol"] = None,
-        loss: Optional[LossProtocol] = None,
-        return_outputs: bool = True,
-        use_tqdm: bool = False,
-        **kwargs: Any,
+            self,
+            loader: DataLoaderProtocol,
+            *,
+            portion: float = 1.0,
+            state: Optional[TrainerState] = None,
+            metrics: Optional["MetricProtocol"] = None,
+            loss: Optional[LossProtocol] = None,
+            return_outputs: bool = True,
+            use_tqdm: bool = False,
+            **kwargs: Any,
     ) -> InferenceOutputs:
         def _core() -> InferenceOutputs:
             results: Dict[str, Optional[List[np.ndarray]]] = {}
@@ -560,7 +559,6 @@ class InferenceProtocol:
             )
 
         use_grad = kwargs.pop("use_grad", self.use_grad_in_predict)
-        print("use_grad = {}".format(use_grad))
         with loader.temporarily_disable_shuffle():
             try:
                 return _core()
@@ -588,10 +586,10 @@ class MetricProtocol(ABC, WithRegister):
 
     @abstractmethod
     def _core(
-        self,
-        np_batch: np_dict_type,
-        np_outputs: np_dict_type,
-        loader: Optional[DataLoaderProtocol],
+            self,
+            np_batch: np_dict_type,
+            np_outputs: np_dict_type,
+            loader: Optional[DataLoaderProtocol],
     ) -> float:
         pass
 
@@ -600,10 +598,10 @@ class MetricProtocol(ABC, WithRegister):
         return False
 
     def evaluate(
-        self,
-        np_batch: np_dict_type,
-        np_outputs: np_dict_type,
-        loader: Optional[DataLoaderProtocol] = None,
+            self,
+            np_batch: np_dict_type,
+            np_outputs: np_dict_type,
+            loader: Optional[DataLoaderProtocol] = None,
     ) -> MetricsOutputs:
         metric = self._core(np_batch, np_outputs, loader)
         score = metric * (1.0 if self.is_positive else -1.0)
